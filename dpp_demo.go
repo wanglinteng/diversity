@@ -11,22 +11,27 @@ import (
 	"strconv"
 )
 
+func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsilon float32) ([]int, error){
+	/**
+	    DPP (Determinantal Point Process)
 
-func dpp(rank_scores []float32, item_dssms [][]float32, max_iter int, epsilon float32) {
-	
-    // ---- init ----
-	// max_iter & epsilon
-	fmt.Printf("max_iter:\n%v\n", max_iter)
-	fmt.Printf("epsilon:\n%v\n", epsilon) 
-	// scores
+		输入参数
+			rank_scores: 精排模型打分、排重等操作后分数, 由大->小排序
+			item_dssms: item的向量，与rank_scores顺序一致
+			sampling_count: DPP采样的条数
+			epsilon: DPP计算参数，建议设置为0.01
+
+		输出结果
+			rank_scores 采样索引顺序，默认 {0, 1, ... , len(sampling_count)}
+
+	**/
+
 	item_count := len(rank_scores)
+	if len(item_dssms) != item_count || item_count < sampling_count {
+		return nil, fmt.Errorf("err %s", "len(item_dssms) != item_count or item_count < sampling_count")
+	}
 	scores := tensor.New(tensor.WithShape(item_count, 1), tensor.WithBacking(rank_scores))
 	// fmt.Printf("scores %v:\n%v\n", scores.Shape(), scores) 
-	// dssms
-	item_dssms_count := len(item_dssms)
-	if item_count != item_dssms_count {
-		return
-	}
 	dssm_dim := len(item_dssms[0])
 	item_dssms_flat := make([]float32, item_count * dssm_dim)
 	k := int(0)
@@ -52,11 +57,11 @@ func dpp(rank_scores []float32, item_dssms [][]float32, max_iter int, epsilon fl
 	kernel_matrix, _ := tensor.Mul(kernel_matrix_0, score_r_2)
 	// fmt.Printf("kernel_matrix:\n%v\n", kernel_matrix)
 	// c
-	c_0 := make([]float32, max_iter * item_count)
+	c_0 := make([]float32, sampling_count * item_count)
 	for i := range c_0 {
 		c_0[i] = float32(0.0)
 	}
-	c := tensor.New(tensor.WithShape(max_iter, item_count), tensor.WithBacking(c_0))
+	c := tensor.New(tensor.WithShape(sampling_count, item_count), tensor.WithBacking(c_0))
 	// fmt.Printf("c:\n%v\n", c)
 	// d
 	d_0, _ := tensor.Diag(kernel_matrix)
@@ -68,7 +73,6 @@ func dpp(rank_scores []float32, item_dssms [][]float32, max_iter int, epsilon fl
 	// fmt.Printf("j:\n%v\n", j)
 	// Yg
 	Yg := sets.NewInt(j)
-	fmt.Printf("Yg:\n%v\n", Yg)
 	// iter
 	iter := int(0)
 	// fmt.Printf("iter:\n%v\n", iter)
@@ -109,14 +113,15 @@ func dpp(rank_scores []float32, item_dssms [][]float32, max_iter int, epsilon fl
 			break
 		}
 		Yg.Insert(j)
-		fmt.Printf("Yg(iter|%v):\n%v\n", iter, Yg )
+		// fmt.Printf("Yg(iter|%v):\n%v\n", iter, Yg )
 		iter += 1
 		// while
-		if Yg.Len() >= max_iter {
+		if Yg.Len() >= sampling_count {
 			break
 		}
 	}
-    fmt.Printf("Yg:\n%v\n", Yg)
+    // fmt.Printf("Yg:\n%v\n", Yg.List())
+	return Yg.List(), nil
 }
 
 func testData(fileName string, max_cnt int) ([]string, []float32, [][]float32) {
@@ -151,10 +156,11 @@ func testData(fileName string, max_cnt int) ([]string, []float32, [][]float32) {
 
 func main() {
 	// parameter
-	max_iter := int(6)
+	sampling_count := int(6)
 	epsilon := float32(0.01)
 	uuids, scores, dssms := testData("./data.txt", 50)
 	fmt.Printf("uuids:\n%v\n", uuids)
 	// dpp
-	dpp(scores, dssms, max_iter, epsilon)
+	dpp_rank, _ := Dpp(scores, dssms, sampling_count, epsilon)
+	fmt.Printf("dpp_rank:\n%v\n", dpp_rank)
 }
