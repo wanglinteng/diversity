@@ -1,18 +1,19 @@
 package main
 
 import (
-	"fmt"
-	"gorgonia.org/tensor"
-	"math"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"os"
 	"bufio"
-	"strings"
+	"fmt"
+	"math"
+	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"gorgonia.org/tensor"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsilon float32) ([]int, error){
+func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsilon float32) ([]int, error) {
 	/**
 	    DPP (Determinantal Point Process)
 
@@ -31,24 +32,24 @@ func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsi
 		return nil, fmt.Errorf("err %s", "len(item_dssms) != item_count or item_count < sampling_count")
 	}
 	scores := tensor.New(tensor.WithShape(item_count, 1), tensor.WithBacking(rank_scores))
-	// fmt.Printf("scores %v:\n%v\n", scores.Shape(), scores) 
+	// fmt.Printf("scores %v:\n%v\n", scores.Shape(), scores)
 	dssm_dim := len(item_dssms[0])
-	item_dssms_flat := make([]float32, item_count * dssm_dim)
+	item_dssms_flat := make([]float32, item_count*dssm_dim)
 	k := int(0)
-    for i := 0; i < item_count; i++ {
+	for i := 0; i < item_count; i++ {
 		for j := 0; j < dssm_dim; j++ {
 			item_dssms_flat[k] = item_dssms[i][j]
 			k = k + 1
 		}
 	}
-    dssms := tensor.New(tensor.WithShape(item_count, dssm_dim), tensor.WithBacking(item_dssms_flat))
-	// fmt.Printf("dssms %v:\n%v\n", dssms.Shape(), dssms) 
+	dssms := tensor.New(tensor.WithShape(item_count, dssm_dim), tensor.WithBacking(item_dssms_flat))
+	// fmt.Printf("dssms %v:\n%v\n", dssms.Shape(), dssms)
 
 	// ---- dpp ----
 	// sim_matrix
 	dssms_t, _ := tensor.T(dssms)
 	sim_matrix, _ := tensor.Dot(dssms, dssms_t)
-	// fmt.Printf("sim_matrix:\n%v\n", sim_matrix) 
+	// fmt.Printf("sim_matrix:\n%v\n", sim_matrix)
 	// kernel_matrix
 	score_r_1, _ := tensor.Repeat(scores, 1, item_count)
 	score_r_2, _ := tensor.T(score_r_1)
@@ -56,7 +57,7 @@ func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsi
 	kernel_matrix, _ := tensor.Mul(kernel_matrix_0, score_r_2)
 	// fmt.Printf("kernel_matrix:\n%v\n", kernel_matrix)
 	// c
-	c_0 := make([]float32, sampling_count * item_count)
+	c_0 := make([]float32, sampling_count*item_count)
 	for i := range c_0 {
 		c_0[i] = float32(0.0)
 	}
@@ -66,7 +67,7 @@ func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsi
 	d_0, _ := tensor.Diag(kernel_matrix)
 	d, _ := d_0.Slice(tensor.S(0), nil)
 	// fmt.Printf("d:\n%v\n", d)
-    // j
+	// j
 	j_0, _ := tensor.Argmax(d, 0)
 	j := j_0.Data().(int)
 	// fmt.Printf("j:\n%v\n", j)
@@ -86,21 +87,21 @@ func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsi
 		Z_Y := Z.Difference(Yg)
 		var ei float32
 		for i := range Z_Y {
-			kji_0, _ := kernel_matrix.At(j ,i) 
+			kji_0, _ := kernel_matrix.At(j, i)
 			kji := kji_0.(float32)
 			dj, _ := d.At(j)
 			dj_sqrt := float32(math.Sqrt(float64(dj.(float32))))
-			if iter == 0 { 
+			if iter == 0 {
 				ei = kji / dj_sqrt
-			}else{
+			} else {
 				c_j, _ := c.Slice(tensor.S(0, iter), tensor.S(j))
 				c_i, _ := c.Slice(tensor.S(0, iter), tensor.S(i))
-				cji, _ := tensor.Dot(c_j.Materialize(),  c_i.Materialize())  // Must Materialize
+				cji, _ := tensor.Dot(c_j.Materialize(), c_i.Materialize()) // Must Materialize
 				ei = (kji - cji.Data().(float32)) / dj_sqrt
 			}
-			c.SetAt(ei, iter, i) 
+			c.SetAt(ei, iter, i)
 			di, _ := d.At(i)
-			d.SetAt(di.(float32) - ei * ei, i) 
+			d.SetAt(di.(float32)-ei*ei, i)
 		}
 
 		d.SetAt(float32(0), j)
@@ -118,7 +119,7 @@ func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsi
 			break
 		}
 	}
-    // fmt.Printf("Yg:\n%v\n", Yg.List())
+	// fmt.Printf("Yg:\n%v\n", Yg.List())
 	return Yg.List(), nil
 }
 
@@ -127,7 +128,7 @@ func testData(fileName string, max_cnt int) ([]string, []float32, [][]float32) {
 	var uuids []string
 	var scores []float32
 	var dssms [][]float32
-    cnt := int(0)
+	cnt := int(0)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -154,10 +155,10 @@ func testData(fileName string, max_cnt int) ([]string, []float32, [][]float32) {
 
 func main() {
 	// parameter
-	sampling_count := int(100)
+	sampling_count := int(6)
 	epsilon := float32(0.01)
-	uuids, scores, dssms := testData("./data.txt", 500)
-	fmt.Printf("uuids:\n%v\n", len(uuids))
+	uuids, scores, dssms := testData("./data.txt", 20)
+	fmt.Printf("uuids: %v\n", len(uuids))
 	// dpp
 	start := time.Now()
 	var dpp_rank []int
@@ -165,7 +166,7 @@ func main() {
 		dpp_rank, _ = Dpp(scores, dssms, sampling_count, epsilon)
 	}
 	// dpp_rank, _ = Dpp(scores, dssms, sampling_count, epsilon)
-	cost := time.Since(start) / time.Millisecond 
-	fmt.Printf("cost=[%dms], avg=[%vms]", cost, float32(cost) / 1000)
+	cost := time.Since(start) / time.Millisecond
+	fmt.Printf("cost %dms, avg %vms\n", cost, float32(cost)/1000)
 	fmt.Printf("dpp_rank:\n%v\n", dpp_rank)
 }

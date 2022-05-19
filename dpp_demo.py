@@ -66,23 +66,21 @@ class DPPModel(object):
             iter += 1
         # print(Yg)
         # print(self.uuids[Yg])
-        return Yg
+        return Yg.sort()
  
 if __name__ == "__main__":
     kwargs = {
-        'item_count': 500,
+        'item_count': 20,
         'item_embed_size': 32,
-        'max_iter': 100,
+        'max_iter': 6,
         'epsilon': 0.01
     }
     dpp_model = DPPModel(**kwargs)
     dpp_model.build_kernel_matrix()
     start_time = time.time()
-    # for i in range(1000):
-    rank = dpp_model.dpp()
-    rank.sort()
-    print(rank)
+    for i in range(1000):
+        rank = dpp_model.dpp()
     end_time = time.time()
-    cost = end_time  - start_time
+    cost = (end_time  - start_time) * 1000
     avg = cost / 1000
-    print('time cost {} avg {}'.format(cost, avg))
+    print('cost {}ms, avg {}ms'.format(cost, avg))
