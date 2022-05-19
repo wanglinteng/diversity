@@ -2,6 +2,7 @@
 #coding:utf-8
 
 import numpy as np
+import time
 
 
 def testData():
@@ -63,17 +64,25 @@ class DPPModel(object):
                 break
             Yg.append(j)
             iter += 1
-        print(Yg)
-        print(self.uuids[Yg])
+        # print(Yg)
+        # print(self.uuids[Yg])
         return Yg
  
 if __name__ == "__main__":
     kwargs = {
-        'item_count': 50,
+        'item_count': 500,
         'item_embed_size': 32,
-        'max_iter': 6,
+        'max_iter': 100,
         'epsilon': 0.01
     }
     dpp_model = DPPModel(**kwargs)
     dpp_model.build_kernel_matrix()
-    print(dpp_model.dpp())
+    start_time = time.time()
+    # for i in range(1000):
+    rank = dpp_model.dpp()
+    rank.sort()
+    print(rank)
+    end_time = time.time()
+    cost = end_time  - start_time
+    avg = cost / 1000
+    print('time cost {} avg {}'.format(cost, avg))

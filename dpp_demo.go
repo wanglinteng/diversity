@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"strings"
 	"strconv"
+	"time"
 )
 
 func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsilon float32) ([]int, error){
@@ -25,7 +26,6 @@ func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsi
 			rank_scores 采样索引顺序，默认 {0, 1, ... , len(sampling_count)}
 
 	**/
-
 	item_count := len(rank_scores)
 	if len(item_dssms) != item_count || item_count < sampling_count {
 		return nil, fmt.Errorf("err %s", "len(item_dssms) != item_count or item_count < sampling_count")
@@ -50,9 +50,8 @@ func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsi
 	sim_matrix, _ := tensor.Dot(dssms, dssms_t)
 	// fmt.Printf("sim_matrix:\n%v\n", sim_matrix) 
 	// kernel_matrix
-	scores_t, _ := tensor.T(scores)
 	score_r_1, _ := tensor.Repeat(scores, 1, item_count)
-	score_r_2, _ := tensor.Repeat(scores_t, 0, item_count)
+	score_r_2, _ := tensor.T(score_r_1)
 	kernel_matrix_0, _ := tensor.Mul(score_r_1, sim_matrix)
 	kernel_matrix, _ := tensor.Mul(kernel_matrix_0, score_r_2)
 	// fmt.Printf("kernel_matrix:\n%v\n", kernel_matrix)
@@ -85,24 +84,23 @@ func Dpp(rank_scores []float32, item_dssms [][]float32, sampling_count int, epsi
 
 	for {
 		Z_Y := Z.Difference(Yg)
-		var ei float64
+		var ei float32
 		for i := range Z_Y {
 			kji_0, _ := kernel_matrix.At(j ,i) 
-			kji := float64(kji_0.(float32))
+			kji := kji_0.(float32)
 			dj, _ := d.At(j)
-			dj_sqrt := math.Sqrt(float64(dj.(float32)))
-			
+			dj_sqrt := float32(math.Sqrt(float64(dj.(float32))))
 			if iter == 0 { 
 				ei = kji / dj_sqrt
 			}else{
 				c_j, _ := c.Slice(tensor.S(0, iter), tensor.S(j))
 				c_i, _ := c.Slice(tensor.S(0, iter), tensor.S(i))
 				cji, _ := tensor.Dot(c_j.Materialize(),  c_i.Materialize())  // Must Materialize
-				ei = (kji - float64(cji.Data().(float32))) / dj_sqrt
+				ei = (kji - cji.Data().(float32)) / dj_sqrt
 			}
-			c.SetAt(float32(ei), iter, i) 
+			c.SetAt(ei, iter, i) 
 			di, _ := d.At(i)
-			d.SetAt(float32(float64(di.(float32)) - ei * ei), i) 
+			d.SetAt(di.(float32) - ei * ei, i) 
 		}
 
 		d.SetAt(float32(0), j)
@@ -156,11 +154,18 @@ func testData(fileName string, max_cnt int) ([]string, []float32, [][]float32) {
 
 func main() {
 	// parameter
-	sampling_count := int(6)
+	sampling_count := int(100)
 	epsilon := float32(0.01)
-	uuids, scores, dssms := testData("./data.txt", 50)
-	fmt.Printf("uuids:\n%v\n", uuids)
+	uuids, scores, dssms := testData("./data.txt", 500)
+	fmt.Printf("uuids:\n%v\n", len(uuids))
 	// dpp
-	dpp_rank, _ := Dpp(scores, dssms, sampling_count, epsilon)
+	start := time.Now()
+	var dpp_rank []int
+	for i := 0; i < 1000; i++ {
+		dpp_rank, _ = Dpp(scores, dssms, sampling_count, epsilon)
+	}
+	// dpp_rank, _ = Dpp(scores, dssms, sampling_count, epsilon)
+	cost := time.Since(start) / time.Millisecond 
+	fmt.Printf("cost=[%dms], avg=[%vms]", cost, float32(cost) / 1000)
 	fmt.Printf("dpp_rank:\n%v\n", dpp_rank)
 }
